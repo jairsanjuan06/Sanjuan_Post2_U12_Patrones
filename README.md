@@ -152,17 +152,6 @@ curl -X POST http://localhost:8080/api/pedidos \
   -d '{"cliente":"Jair","subtotal":100.0,"tipo":"EXPRESS"}'
 ```
 
----
-
-## Commits sugeridos
-
-```
-feat: implementar 5 reglas ArchUnit para validacion arquitectonica
-docs: agregar ADR-001, ADR-002, ADR-003 en docs/adr/
-test: violacion de arquitectura intencional para verificar pipeline
-```
-
----
 
 ## Tecnologías
 
