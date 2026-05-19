@@ -6,10 +6,14 @@ import com.empresa.pedidos.dominio.TipoPedido;
 import com.empresa.pedidos.dominio.puertos.ProcesadorPedido;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
-
+/**
+ * Estrategia de procesamiento para pedidos de tipo ESTÁNDAR.
+ *
+ * <p>Regla de negocio: costo = subtotal × 1.1 (10% de recargo).</p>
+ *
+ * <p>Patrón: Strategy — encapsula el algoritmo de cálculo estándar,
+ * eliminando el bloque {@code if} del servicio legacy.</p>
+ */
 @Component
 public class ProcesadorPedidoEstandar implements ProcesadorPedido {
 
@@ -20,10 +24,7 @@ public class ProcesadorPedidoEstandar implements ProcesadorPedido {
 
     @Override
     public void procesar(Pedido pedido) {
-        BigDecimal subtotal = BigDecimal.valueOf(pedido.getSubtotal());
-        BigDecimal costo = subtotal.multiply(BigDecimal.valueOf(1.1))
-                .setScale(2, RoundingMode.HALF_UP);
-        pedido.setCosto(costo.doubleValue());
+        pedido.setCosto(pedido.getSubtotal() * 1.1);
         pedido.setEstado(EstadoPedido.PROCESADO);
     }
 }

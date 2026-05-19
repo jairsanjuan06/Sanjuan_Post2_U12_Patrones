@@ -1,5 +1,6 @@
 package com.empresa.pedidos.arquitectura;
 
+import com.empresa.pedidos.dominio.puertos.ProcesadorPedido;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -9,20 +10,14 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
- * Reglas de arquitectura verificadas automáticamente con ArchUnit.
+ * Reglas de validación arquitectónica — Post-Contenido 2, Unidad 12.
  *
- * <p>Estas reglas actúan como fitness functions estáticas (sección 5.2
- * de la guía): se ejecutan en cada build de Maven y fallan el build
- * si alguna restricción arquitectónica es violada.</p>
+ * Cada regla es una fitness function estática (sección 5.2 de la guía):
+ * se ejecuta en cada build de Maven y en el pipeline de GitHub Actions.
+ * Si alguna clase viola una regla, el build falla con un mensaje descriptivo.
  *
- * <p>Reglas verificadas:
- * <ul>
- *   <li>El dominio no depende de infraestructura ni adaptadores.</li>
- *   <li>Los controladores solo acceden a la fachada.</li>
- *   <li>Las interfaces de puerto residen en el paquete dominio.puertos.</li>
- *   <li>La infraestructura no es llamada directamente desde el dominio.</li>
- * </ul>
- * </p>
+ * Las 5 reglas implementadas protegen las invariantes de la arquitectura
+ * Hexagonal adoptada en ADR-001.
  */
 @AnalyzeClasses(
         packages = "com.empresa.pedidos",
@@ -31,8 +26,12 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 public class ReglasArquitecturaTest {
 
     /**
-     * El dominio NO debe depender de infraestructura ni de adaptadores.
-     * Garantiza que el núcleo del negocio es independiente de la tecnología.
+     * Regla 1: El dominio no depende de infraestructura ni adaptadores.
+     *
+     * Fundamento (ADR-001): el dominio es el núcleo estable del sistema
+     * (Instability = 0). Si depende de infraestructura, un cambio de JPA o
+     * de canal de notificación obliga a modificar el dominio — viola la
+     * Dependency Inversion Principle de la arquitectura Hexagonal.
      */
     @ArchTest
     static final ArchRule dominioAisladoDeInfraestructura = noClasses()
@@ -40,45 +39,68 @@ public class ReglasArquitecturaTest {
             .should().dependOnClassesThat()
             .resideInAnyPackage(
                     "..infraestructura..",
-                    "..adaptadores.."
+                    "..adaptadores..",
+                    "javax.persistence..",
+                    "org.springframework.mail.."
             )
-            .because("El dominio no debe conocer detalles de infraestructura (Hexagonal Architecture)");
+            .because("El dominio no debe conocer infraestructura ni adaptadores (ADR-001: Arquitectura Hexagonal)");
 
     /**
-     * Los controladores REST solo deben depender de la FachadaPedidos.
-     * Verifica que el controlador no accede directamente a servicios o repositorios.
+     * Regla 2: Los controladores REST solo acceden a la Facade.
+     *
+     * Fundamento (ADR-001 + Facade Pattern): limitar el acoplamiento del
+     * controlador a una única dependencia — FachadaPedidos — reduce su CE
+     * y lo protege de cambios internos del sistema de aplicación.
      */
     @ArchTest
-    static final ArchRule controladoresSoloAccedenAFachada = classes()
+    static final ArchRule controladorSoloFacade = classes()
             .that().resideInAPackage("..adaptadores.rest..")
             .should().onlyAccessClassesThat()
             .resideInAnyPackage(
                     "..adaptadores.facade..",
-                    "..adaptadores.rest..",
                     "..dominio..",
-                    "java..",
-                    "org.springframework.."
+                    "org.springframework.web..",
+                    "org.springframework.http..",
+                    "java.."
             )
-            .because("El controlador REST solo debe hablar con la FachadaPedidos (Facade Pattern)");
+            .because("El controlador REST solo debe hablar con FachadaPedidos (Facade Pattern)");
 
     /**
-     * Los puertos (interfaces) deben estar en el paquete dominio.puertos.
-     * Verifica la correcta ubicación de las abstracciones del dominio.
+     * Regla 3: Los puertos de dominio deben ser interfaces.
+     *
+     * Fundamento (ADR-001): los puertos son contratos abstractos del dominio.
+     * Una clase concreta en dominio.puertos rompería la inversión de dependencias.
      */
     @ArchTest
-    static final ArchRule puertosEnPaqueteDominioPuertos = classes()
+    static final ArchRule puertosComoInterfaces = classes()
             .that().resideInAPackage("..dominio.puertos..")
             .should().beInterfaces()
-            .because("El paquete dominio.puertos debe contener solo interfaces de puerto");
+            .because("Los puertos de dominio deben ser interfaces puras, sin implementación concreta (ADR-001)");
 
     /**
-     * El dominio NO debe importar clases de jakarta.persistence directamente
-     * en el paquete de puertos (las interfaces de puerto deben ser puras).
+     * Regla 4: Los procesadores implementan el puerto ProcesadorPedido.
+     *
+     * Fundamento (ADR-002): cada estrategia debe cumplir el contrato del puerto.
+     * Una clase en el paquete procesadores sin implementar ProcesadorPedido
+     * es un objeto huérfano sin contrato verificable.
      */
     @ArchTest
-    static final ArchRule puertosNoDependenDeJpa = noClasses()
-            .that().resideInAPackage("..dominio.puertos..")
-            .should().dependOnClassesThat()
-            .resideInAPackage("jakarta.persistence..")
-            .because("Las interfaces de puerto deben ser independientes de JPA");
+    static final ArchRule procesadoresImplementanPuerto = classes()
+            .that().resideInAPackage("..adaptadores.procesadores..")
+            .should().implement(ProcesadorPedido.class)
+            .because("Todo procesador debe implementar el puerto ProcesadorPedido (ADR-002: Strategy Pattern)");
+
+    /**
+     * Regla 5: La infraestructura no accede a los adaptadores REST.
+     *
+     * Fundamento: la infraestructura es capa de salida; acceder a los
+     * adaptadores REST (capa de entrada) crearía una dependencia circular
+     * que rompe el flujo unidireccional de la arquitectura Hexagonal.
+     */
+    @ArchTest
+    static final ArchRule infraestructuraNoAccedeRest = noClasses()
+            .that().resideInAPackage("..infraestructura..")
+            .should().accessClassesThat()
+            .resideInAPackage("..adaptadores.rest..")
+            .because("La infraestructura no debe depender de los adaptadores REST (dependencia circular)");
 }

@@ -1,201 +1,171 @@
-# Sanjuan_Post1_U12_Patrones
+# Sanjuan_Post2_U12_Patrones
 
-**Unidad 12 — Integración de Patrones y Arquitecturas**  
+**Unidad 12 — Validación Arquitectónica con ArchUnit y ADR**  
 Patrones de Diseño de Software · Ingeniería de Sistemas · UDES 2026
+
+> Este proyecto extiende `Sanjuan_Post1_U12_Patrones` con validación arquitectónica
+> automatizada (ArchUnit + GitHub Actions) y documentación de decisiones (ADR).
 
 ---
 
 ## Descripción
 
-Sistema de gestión de pedidos en Spring Boot que integra cuatro patrones de diseño GoF sobre una arquitectura Hexagonal. El objetivo es demostrar cómo cada patrón resuelve un problema de diseño concreto y cómo sus capas son verificables con ArchUnit.
+Sistema de gestión de pedidos en Spring Boot que integra cuatro patrones GoF sobre
+arquitectura Hexagonal. En este Post-Contenido 2 se agregan:
+
+- **5 reglas ArchUnit** que convierten las restricciones de diseño en pruebas ejecutables.
+- **Pipeline de GitHub Actions** que valida la arquitectura en cada push y pull request.
+- **3 ADRs** que documentan las decisiones de diseño más importantes del sistema.
 
 ---
 
 ## Arquitectura del Sistema
 
-El proyecto sigue una estructura **feature-first** con separación hexagonal:
-
 ```
 com.empresa.pedidos/
-├── dominio/                     ← Núcleo de negocio (sin dependencias externas)
+├── dominio/                     ← Núcleo de negocio (Instability = 0.00)
 │   ├── Pedido.java
 │   ├── TipoPedido.java
 │   ├── EstadoPedido.java
-│   └── puertos/                 ← Interfaces (contratos del dominio)
+│   └── puertos/                 ← Interfaces (contratos abstractos)
 │       ├── RepositorioPedidos.java
 │       ├── ProcesadorPedido.java
 │       └── ServicioNotificacion.java
-├── aplicacion/                  ← Casos de uso y Factory
+├── aplicacion/                  ← Casos de uso (Instability = 0.29)
 │   ├── ServicioPedidos.java
 │   ├── ProcesadorPedidoFactory.java
 │   └── PedidoProcesadoEvent.java
-├── infraestructura/             ← Implementaciones técnicas
+├── infraestructura/             ← Implementaciones técnicas (Instability = 1.00)
 │   ├── persistencia/
-│   │   ├── PedidoJpaRepository.java
-│   │   └── RepositorioPedidosJpa.java
 │   └── notificaciones/
-│       ├── NotificacionEmail.java
-│       └── NotificacionLog.java
-└── adaptadores/                 ← Entrada/salida del sistema
-    ├── procesadores/            ← Estrategias de cálculo
-    │   ├── ProcesadorPedidoEstandar.java
-    │   ├── ProcesadorPedidoExpress.java
-    │   └── ProcesadorPedidoInternacional.java
+└── adaptadores/                 ← Entrada/salida (Instability = 0.67)
+    ├── procesadores/
     ├── facade/
-    │   └── FachadaPedidos.java
     └── rest/
-        └── PedidoController.java
-```
-
-### Flujo de una petición POST /api/pedidos
-
-```
-PedidoController
-      │ delega
-      ▼
-FachadaPedidos (Facade)
-      │ invoca
-      ▼
-ServicioPedidos
-      ├─► ProcesadorPedidoFactory (Factory) ──► ProcesadorPedido* (Strategy)
-      ├─► RepositorioPedidos (puerto) ──────────► RepositorioPedidosJpa (Adapter)
-      └─► ApplicationEventPublisher ────────────► NotificacionEmail (Observer)
-                                                 NotificacionLog   (Observer)
 ```
 
 ---
 
-## Justificación de Patrones
+## Validación Arquitectónica
 
-### 1. Strategy — desacoplar el algoritmo de cálculo
+Las reglas se encuentran en:
+`src/test/java/com/empresa/pedidos/arquitectura/ReglasArquitecturaTest.java`
 
-**Problema:** El servicio legacy usaba un bloque `if/else if` para calcular el costo según el tipo de pedido. Cada nuevo tipo de pedido requería modificar la clase de servicio (viola OCP).
+```bash
+mvn test -Dtest=ReglasArquitecturaTest
+# Salida esperada: Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+```
 
-**Solución:** La interfaz `ProcesadorPedido` define el contrato; cada implementación encapsula su propia regla de cálculo:
+### Las 5 reglas implementadas
 
-| Tipo         | Fórmula                       |
-|--------------|-------------------------------|
-| ESTANDAR     | subtotal × 1.1                |
-| EXPRESS      | subtotal × 1.3                |
-| INTERNACIONAL| subtotal × 1.5 + $25.00       |
+| # | Nombre de la regla | Qué protege |
+|---|---|---|
+| 1 | `dominioAisladoDeInfraestructura` | El dominio no importa clases de infraestructura, adaptadores, JPA ni JavaMail |
+| 2 | `controladorSoloFacade` | El controlador REST solo accede a `FachadaPedidos` y al dominio |
+| 3 | `puertosComoInterfaces` | Todos los elementos de `dominio.puertos` son interfaces |
+| 4 | `procesadoresImplementanPuerto` | Todo componente en `adaptadores.procesadores` implementa `ProcesadorPedido` |
+| 5 | `infraestructuraNoAccedeRest` | La infraestructura no accede a los adaptadores REST (evita ciclos) |
 
-**Justificación:** La variación es real (3 tipos documentados), frecuente (nuevos tipos de envío son previsibles) y cada algoritmo tiene una regla de negocio distinta. Cumple la Regla del Problema Primero (sección 1.2 de la guía).
+### Ejemplo de violación detectada
 
----
-
-### 2. Factory — selección dinámica de Strategy
-
-**Problema:** Algún componente necesitaba decidir cuál estrategia usar en tiempo de ejecución según el tipo de pedido, sin que el servicio de aplicación conozca las implementaciones concretas.
-
-**Solución:** `ProcesadorPedidoFactory` recibe por inyección de dependencias todas las implementaciones de `ProcesadorPedido` y construye un `Map<TipoPedido, ProcesadorPedido>`. El servicio solo llama `factory.obtener(tipo)`.
-
-**Justificación:** Spring DI actúa como Factory implícita para la mayoría de los beans, pero aquí la selección requiere lógica de negocio (lookup por tipo de pedido) que el contenedor no resuelve solo. Esto justifica la Factory manual según la regla de la guía (sección 1.2).
-
----
-
-### 3. Observer — notificación desacoplada con Spring Events
-
-**Problema:** El servicio legacy tenía acoplamiento directo a `JavaMailSender`. Agregar un nuevo canal de notificación requería modificar el servicio de aplicación.
-
-**Solución:** Se publica `PedidoProcesadoEvent` vía `ApplicationEventPublisher`. Cada listener (`NotificacionEmail`, `NotificacionLog`) suscribe con `@EventListener` y actúa de forma independiente.
-
-**Justificación:** Los suscriptores (email, log, SMS en el futuro) son independientes entre sí y opcionales. El orden de notificación no importa. Esto cumple el contexto de uso del patrón Observer según la tabla de la guía (sección 1.1).
-
----
-
-### 4. Facade — interfaz simplificada para el controlador
-
-**Problema:** Sin Facade, el controlador REST necesitaría inyectar `ServicioPedidos`, `ProcesadorPedidoFactory` y `RepositorioPedidos`, aumentando su acoplamiento efferente (CE).
-
-**Solución:** `FachadaPedidos` expone únicamente los métodos que el controlador necesita (`crearPedido`, `buscarPorId`, `listarPendientes`). El controlador tiene una sola dependencia.
-
-**Justificación:** El controlador es la capa de entrada con mayor tasa de cambio (CE ≈ 1). Mantener su CE bajo reduce su fragilidad ante cambios internos (sección 3.1 de la guía).
-
----
-
-## Métricas de Calidad — Antes vs Después
-
-| Métrica                      | ServicioPedidosLegacy | FachadaPedidos + patrón |
-|------------------------------|-----------------------|-------------------------|
-| Cyclomatic Complexity        | 4                     | 1                       |
-| Cognitive Complexity         | 6                     | 0                       |
-| Acoplamiento a JavaMailSender| Directo               | Eliminado               |
-| Acoplamiento a JPA Repository| Directo               | Solo en infraestructura |
-| Testabilidad sin Spring      | Baja                  | Alta                    |
-
-> Las capturas de SonarQube se encuentran en la carpeta `/capturas/`.
-
----
-
-## Verificación con ArchUnit
-
-Las reglas de arquitectura se ejecutan como pruebas JUnit en cada build:
-
+Si alguien agrega en `Pedido.java`:
 ```java
-// El dominio no debe depender de infraestructura
-noClasses().that().resideInAPackage("..dominio..")
-    .should().dependOnClassesThat()
-    .resideInAnyPackage("..infraestructura..", "..adaptadores..");
-
-// Los controladores solo acceden a la Facade
-classes().that().resideInAPackage("..adaptadores.rest..")
-    .should().onlyAccessClassesThat()
-    .resideInAnyPackage("..adaptadores.facade..", "..dominio..", ...);
+import com.empresa.pedidos.infraestructura.persistencia.PedidoJpaRepository;
 ```
+
+ArchUnit falla el build con:
+```
+Architecture Violation [Priority: MEDIUM] - Rule
+'no classes that reside in a package '..dominio..'
+should depend on classes that reside in '..infraestructura..'
+because El dominio no debe conocer infraestructura ni adaptadores (ADR-001)'
+was violated (1 times)
+```
+
+### Prueba de violación intencional (Paso 6)
+
+```bash
+# 1. Introducir violación temporal en Pedido.java
+# 2. Commit y push a develop
+git add . && git commit -m "test: violacion de arquitectura intencional para verificar pipeline"
+git push origin develop
+# 3. GitHub Actions falla el job "arquitectura"
+# 4. Revertir
+git revert HEAD && git push origin develop
+# 5. Pipeline vuelve a verde
+```
+
+---
+
+## Pipeline de GitHub Actions
+
+Archivo: `.github/workflows/arquitectura.yml`
+
+Se ejecuta en cada push a `main` y `develop`, y en cada PR a `main`:
+
+```
+push/PR → Checkout → Java 17 → Cache Maven
+        → mvn test -Dtest=ReglasArquitecturaTest   ← falla si hay violación
+        → mvn verify                                ← suite completa
+```
+
+---
+
+## Decisiones de Diseño (ADRs)
+
+Los Architecture Decision Records se encuentran en `docs/adr/`:
+
+| ADR | Decisión | Estado |
+|---|---|---|
+| [ADR-001](docs/adr/ADR-001.md) | Adopción de Arquitectura Hexagonal | Aceptado |
+| [ADR-002](docs/adr/ADR-002.md) | Factory + Strategy para selección de procesador | Aceptado |
+| [ADR-003](docs/adr/ADR-003.md) | Spring Events (Observer) para notificaciones | Aceptado |
+
+---
+
+## Patrones implementados (Post-Contenido 1)
+
+| Patrón | Clase principal | Problema que resuelve |
+|---|---|---|
+| Strategy | `ProcesadorPedido` + 3 implementaciones | Elimina el `if/else if` de cálculo de costo |
+| Factory | `ProcesadorPedidoFactory` | Selección dinámica de estrategia por tipo |
+| Observer | `PedidoProcesadoEvent` + 2 listeners | Notificaciones desacopladas |
+| Facade | `FachadaPedidos` | El controller tiene 1 sola dependencia |
 
 ---
 
 ## Ejecución
 
 ```bash
-# Compilar y ejecutar pruebas (incluye ArchUnit)
+# Compilar y ejecutar todas las pruebas (incluye ArchUnit)
 mvn clean package
+
+# Solo reglas de arquitectura
+mvn test -Dtest=ReglasArquitecturaTest
 
 # Levantar la aplicación
 mvn spring-boot:run
 
-# Análisis SonarQube (requiere Docker con SonarQube en puerto 9000)
-mvn clean verify sonar:sonar \
-  -Dsonar.projectKey=Sanjuan_Post1_U12_Patrones \
-  -Dsonar.host.url=http://localhost:9000 \
-  -Dsonar.login=<token>
+# POST de prueba con curl
+curl -X POST http://localhost:8080/api/pedidos \
+  -H "Content-Type: application/json" \
+  -d '{"cliente":"Jair","subtotal":100.0,"tipo":"EXPRESS"}'
 ```
 
-## Endpoints REST
+---
 
-| Método | URL                        | Descripción                    |
-|--------|----------------------------|--------------------------------|
-| POST   | `/api/pedidos`             | Crea y procesa un pedido       |
-| GET    | `/api/pedidos/{id}`        | Busca un pedido por ID         |
-| GET    | `/api/pedidos/pendientes`  | Lista pedidos en estado PENDIENTE |
+## Commits sugeridos
 
-### Ejemplo de petición
-
-```json
-POST /api/pedidos
-{
-  "cliente": "Jair Sanjuan",
-  "subtotal": 100.0,
-  "tipo": "EXPRESS"
-}
+```
+feat: implementar 5 reglas ArchUnit para validacion arquitectonica
+docs: agregar ADR-001, ADR-002, ADR-003 en docs/adr/
+test: violacion de arquitectura intencional para verificar pipeline
 ```
 
-```json
-// Respuesta esperada
-{
-  "id": 1,
-  "cliente": "Jair Sanjuan",
-  "subtotal": 100.0,
-  "costo": 130.0,
-  "tipo": "EXPRESS",
-  "estado": "PROCESADO"
-}
-```
+---
 
 ## Tecnologías
 
 - Java 17 · Spring Boot 3.2.5 · Spring Data JPA · H2 · Maven
 - ArchUnit 1.2.1 · JUnit 5 · AssertJ
-- SonarQube (análisis de calidad)
-
-![alt text](capturas/Dashboard-sonarqube.png)
+- GitHub Actions (CI/CD)

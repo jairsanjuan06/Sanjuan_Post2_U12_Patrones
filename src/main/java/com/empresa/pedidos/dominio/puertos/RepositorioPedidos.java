@@ -5,6 +5,11 @@ import com.empresa.pedidos.dominio.Pedido;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Puerto de dominio para persistencia de pedidos.
+ * El dominio solo conoce esta interfaz; la implementación concreta
+ * (JPA, MongoDB, etc.) reside en la capa de infraestructura.
+ */
 public interface RepositorioPedidos {
 
     /**

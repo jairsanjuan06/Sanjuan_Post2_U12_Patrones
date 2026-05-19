@@ -7,6 +7,16 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Fachada que expone una interfaz simplificada al controlador REST.
+ *
+ * <p>El controlador solo conoce esta clase; no tiene acceso directo a
+ * {@link ServicioPedidos}, repositorios ni factories. Esto reduce el
+ * acoplamiento entre la capa web y la lógica de aplicación.</p>
+ *
+ * <p>Patrón: Facade — punto de entrada único que oculta la complejidad
+ * interna (Factory + Strategy + Observer + Repository).</p>
+ */
 @Service
 public class FachadaPedidos {
 

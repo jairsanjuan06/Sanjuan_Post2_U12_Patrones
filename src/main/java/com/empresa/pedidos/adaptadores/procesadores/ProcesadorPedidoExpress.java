@@ -6,9 +6,14 @@ import com.empresa.pedidos.dominio.TipoPedido;
 import com.empresa.pedidos.dominio.puertos.ProcesadorPedido;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
+/**
+ * Estrategia de procesamiento para pedidos de tipo EXPRESS.
+ *
+ * <p>Regla de negocio: costo = subtotal × 1.3 (30% de recargo por urgencia).</p>
+ *
+ * <p>Patrón: Strategy — algoritmo alternativo intercambiable sin modificar
+ * ninguna otra clase del sistema.</p>
+ */
 @Component
 public class ProcesadorPedidoExpress implements ProcesadorPedido {
 
@@ -19,10 +24,7 @@ public class ProcesadorPedidoExpress implements ProcesadorPedido {
 
     @Override
     public void procesar(Pedido pedido) {
-        BigDecimal subtotal = BigDecimal.valueOf(pedido.getSubtotal());
-        BigDecimal costo = subtotal.multiply(BigDecimal.valueOf(1.3))
-                .setScale(2, RoundingMode.HALF_UP);
-        pedido.setCosto(costo.doubleValue());
+        pedido.setCosto(pedido.getSubtotal() * 1.3);
         pedido.setEstado(EstadoPedido.PROCESADO);
     }
 }

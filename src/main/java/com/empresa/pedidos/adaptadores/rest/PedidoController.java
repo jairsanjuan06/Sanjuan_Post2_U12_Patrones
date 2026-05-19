@@ -12,6 +12,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * Controlador REST para la gestión de pedidos.
+ *
+ * <p>Única dependencia: {@link FachadaPedidos}. El controlador no conoce
+ * factories, repositorios ni servicios internos, lo que mantiene el
+ * acoplamiento de la capa web al mínimo necesario.</p>
+ *
+ * <p>Patrón: Facade — el controlador actúa como cliente de la fachada.</p>
+ */
 @RestController
 @RequestMapping("/api/pedidos")
 public class PedidoController {

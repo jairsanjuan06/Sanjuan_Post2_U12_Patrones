@@ -8,6 +8,13 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Caso de uso principal del sistema de pedidos.
+ *
+ * <p>Coordina la lógica de aplicación: delega el cálculo al procesador
+ * (Strategy), persiste a través del repositorio (puerto) y notifica
+ * mediante eventos de Spring (Observer).</p>
+ */
 @Service
 public class ServicioPedidos {
 
@@ -16,11 +23,11 @@ public class ServicioPedidos {
     private final ApplicationEventPublisher publisher;
 
     public ServicioPedidos(ProcesadorPedidoFactory factory,
-            RepositorioPedidos repositorio,
-            ApplicationEventPublisher publisher) {
-        this.factory = factory;
+                           RepositorioPedidos repositorio,
+                           ApplicationEventPublisher publisher) {
+        this.factory     = factory;
         this.repositorio = repositorio;
-        this.publisher = publisher;
+        this.publisher   = publisher;
     }
 
     /**
