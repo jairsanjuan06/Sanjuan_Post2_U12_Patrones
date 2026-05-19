@@ -1,0 +1,6 @@
+projectKey=pedidos-integrado
+serverUrl=http://localhost:9000
+serverVersion=26.5.0.122743
+dashboardUrl=http://localhost:9000/dashboard?id=pedidos-integrado
+ceTaskId=abf96f94-2d8e-4f98-a0d5-a68c6a836ff0
+ceTaskUrl=http://localhost:9000/api/ce/task?id=abf96f94-2d8e-4f98-a0d5-a68c6a836ff0

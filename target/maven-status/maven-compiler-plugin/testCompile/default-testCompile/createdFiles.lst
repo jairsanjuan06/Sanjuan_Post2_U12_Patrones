@@ -1,0 +1,4 @@
+com\empresa\pedidos\adaptadores\ProcesadorPedidoStrategyTest.class
+com\empresa\pedidos\aplicacion\ProcesadorPedidoFactoryTest.class
+com\empresa\pedidos\arquitectura\ReglasArquitecturaTest.class
+com\empresa\pedidos\adaptadores\FachadaPedidosIntegrationTest.class
